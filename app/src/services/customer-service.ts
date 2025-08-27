@@ -1,4 +1,5 @@
 import { ShopifyApiClient, ShopifyApiError } from './shopify-api-client';
+import { ShopifyApiProvider } from '../providers/shopify-api-provider';
 import { Session } from '@shopify/shopify-api';
 import { ShopifyCustomer, ShopifyMetafield } from '../types';
 
@@ -18,8 +19,14 @@ export interface CustomerMetafields {
 export class CustomerService {
   private apiClient: ShopifyApiClient;
 
-  constructor(apiClient: ShopifyApiClient) {
-    this.apiClient = apiClient;
+  constructor(apiProvider?: ShopifyApiProvider) {
+    if (apiProvider) {
+      this.apiClient = apiProvider.getClient();
+    } else {
+      // Fallback to default provider for backward compatibility
+      const provider = ShopifyApiProvider.getInstance();
+      this.apiClient = provider.getClient();
+    }
   }
 
   /**

@@ -3,10 +3,10 @@ import { ProxyHandler } from '../routes/proxy-handler';
 import { CustomerService } from '../services/customer-service';
 import { ProductService } from '../services/product-service';
 
-// Mock the services
+// Mock the services and provider
 jest.mock('../services/customer-service');
 jest.mock('../services/product-service');
-jest.mock('../services/shopify-api-client');
+jest.mock('../providers/shopify-api-provider');
 
 describe('ProxyHandler', () => {
   let proxyHandler: ProxyHandler;

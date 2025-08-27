@@ -2,25 +2,18 @@ import { Request, Response } from 'express';
 import { Session } from '@shopify/shopify-api';
 import { CustomerService } from '../services/customer-service';
 import { ProductService } from '../services/product-service';
-import { ShopifyApiClient, ShopifyApiConfig } from '../services/shopify-api-client';
+import { ShopifyApiProvider } from '../providers/shopify-api-provider';
 import { UserProfile, ProxyResponse, validateUserId } from '../types';
 
 export class ProxyHandler {
   private customerService: CustomerService;
   private productService: ProductService;
-  private apiClient: ShopifyApiClient;
+  private apiProvider: ShopifyApiProvider;
 
   constructor() {
-    const config: ShopifyApiConfig = {
-      apiKey: process.env['SHOPIFY_API_KEY'] || '',
-      apiSecretKey: process.env['SHOPIFY_API_SECRET'] || '',
-      scopes: (process.env['SHOPIFY_SCOPES'] || 'read_customers,read_products').split(','),
-      hostName: process.env['SHOPIFY_APP_URL'] || 'localhost:3000'
-    };
-
-    this.apiClient = new ShopifyApiClient(config);
-    this.customerService = new CustomerService(this.apiClient);
-    this.productService = new ProductService(this.apiClient);
+    this.apiProvider = ShopifyApiProvider.getInstance();
+    this.customerService = new CustomerService(this.apiProvider);
+    this.productService = new ProductService(this.apiProvider);
   }
 
   /**
@@ -95,7 +88,6 @@ export class ProxyHandler {
       res.json(response);
 
     } catch (error) {
-      console.error('Error in handleUserLanding:', error);
 
       const response: ProxyResponse = {
         success: false,

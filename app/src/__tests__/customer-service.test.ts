@@ -1,16 +1,20 @@
 import { CustomerService } from '../services/customer-service';
 import { ShopifyApiClient, ShopifyApiError } from '../services/shopify-api-client';
+import { ShopifyApiProvider } from '../providers/shopify-api-provider';
 import { Session } from '@shopify/shopify-api';
 
-// Mock the ShopifyApiClient but keep ShopifyApiError
+// Mock the ShopifyApiClient and Provider but keep ShopifyApiError
 jest.mock('../services/shopify-api-client', () => ({
   ShopifyApiClient: jest.fn(),
   ShopifyApiError: jest.requireActual('../services/shopify-api-client').ShopifyApiError
 }));
 
+jest.mock('../providers/shopify-api-provider');
+
 describe('CustomerService', () => {
   let customerService: CustomerService;
   let mockApiClient: jest.Mocked<ShopifyApiClient>;
+  let mockProvider: jest.Mocked<ShopifyApiProvider>;
   let mockSession: Session;
   let mockRestClient: any;
 
@@ -26,8 +30,12 @@ describe('CustomerService', () => {
       validateResponse: jest.fn()
     } as any;
 
+    mockProvider = {
+      getClient: jest.fn().mockReturnValue(mockApiClient)
+    } as any;
+
     mockSession = { shop: 'test-shop' } as Session;
-    customerService = new CustomerService(mockApiClient);
+    customerService = new CustomerService(mockProvider);
   });
 
   describe('getCustomerById', () => {
