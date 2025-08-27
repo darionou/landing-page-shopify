@@ -18,7 +18,7 @@ router.get('/api/health', (_req, res) => {
 // Format: /apps/{app-handle}/proxy/*
 router.use('/proxy', (req, res, next) => {
   // Verify Shopify proxy request signature if needed
-  if (!proxyHandler.validateProxySignature(req)) {
+  if (!proxyHandler.validateProxySignature()) {
     res.status(401).json({
       success: false,
       error: 'Invalid proxy signature'
@@ -42,4 +42,4 @@ router.get('/proxy/health', (_req, res) => {
   });
 });
 
-export { router as routes };
+export { router };

@@ -43,7 +43,7 @@ export class ShopifyApiClient {
       scopes: config.scopes,
       hostName: config.hostName,
       apiVersion: config.apiVersion || LATEST_API_VERSION,
-      isEmbeddedApp: false,
+      isEmbeddedApp: false
     });
   }
 
@@ -68,7 +68,7 @@ export class ShopifyApiClient {
         return await apiCall();
       } catch (error) {
         lastError = error as Error;
-        
+
         // Don't retry on client errors (4xx)
         if (this.isClientError(error)) {
           throw this.createShopifyApiError(error, operation);
@@ -107,8 +107,8 @@ export class ShopifyApiClient {
 
     // Check for Shopify API errors in response
     if (response.errors) {
-      const errorMessage = Array.isArray(response.errors) 
-        ? response.errors.join(', ') 
+      const errorMessage = Array.isArray(response.errors)
+        ? response.errors.join(', ')
         : response.errors;
       throw new ShopifyApiError(`Shopify API error for ${operation}: ${errorMessage}`);
     }
@@ -117,7 +117,7 @@ export class ShopifyApiClient {
   /**
    * Creates a session object for API calls
    */
-  createSession(shop: string, _accessToken: string): Session {
+  createSession(shop: string): Session {
     // Note: accessToken would be used in a real implementation for session creation
     return this.shopify.session.customAppSession(shop);
   }

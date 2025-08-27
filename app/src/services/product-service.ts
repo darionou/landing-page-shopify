@@ -22,16 +22,16 @@ export class ProductService {
    * Retrieves product data by product ID
    */
   async getProductById(
-    session: Session, 
+    session: Session,
     productId: number
   ): Promise<ProductData | null> {
     try {
       const restClient = this.apiClient.createRestClient(session);
-      
+
       const productResponse = await this.apiClient.makeApiCall(
         async () => {
           return await restClient.get({
-            path: `products/${productId}`,
+            path: `products/${productId}`
           });
         },
         `get product ${productId}`
@@ -44,7 +44,7 @@ export class ProductService {
       }
 
       const product: ShopifyProduct = productResponse.body.product;
-      
+
       return this.transformProductData(product);
 
     } catch (error) {
@@ -63,7 +63,7 @@ export class ProductService {
     assignedProductId: number
   ): Promise<AssignedProduct | null> {
     const productData = await this.getProductById(session, assignedProductId);
-    
+
     if (!productData) {
       return null;
     }
@@ -83,7 +83,7 @@ export class ProductService {
   async getDefaultProduct(session: Session): Promise<AssignedProduct | null> {
     try {
       const restClient = this.apiClient.createRestClient(session);
-      
+
       const productsResponse = await this.apiClient.makeApiCall(
         async () => {
           return await restClient.get({
@@ -100,7 +100,7 @@ export class ProductService {
       this.apiClient.validateResponse(productsResponse, 'get default product');
 
       const products: ShopifyProduct[] = productsResponse.body?.products || [];
-      
+
       if (products.length === 0) {
         return null;
       }
@@ -111,7 +111,7 @@ export class ProductService {
       }
 
       const product = this.transformProductData(firstProduct);
-      
+
       return {
         id: product.id,
         title: product.title,
@@ -130,8 +130,8 @@ export class ProductService {
    * Validates product ID format
    */
   validateProductId(productId: any): boolean {
-    return typeof productId === 'number' && 
-           productId > 0 && 
+    return typeof productId === 'number' &&
+           productId > 0 &&
            Number.isInteger(productId);
   }
 
@@ -159,7 +159,7 @@ export class ProductService {
     productIds: number[]
   ): Promise<ProductData[]> {
     const products: ProductData[] = [];
-    
+
     for (const productId of productIds) {
       try {
         const product = await this.getProductById(session, productId);
@@ -171,7 +171,7 @@ export class ProductService {
         // Continue with other products
       }
     }
-    
+
     return products;
   }
 
@@ -181,12 +181,12 @@ export class ProductService {
   private transformProductData(product: ShopifyProduct): ProductData {
     // Get the first variant's price, or default to '0.00'
     const price = product.variants && product.variants.length > 0 && product.variants[0]
-      ? product.variants[0].price 
+      ? product.variants[0].price
       : '0.00';
 
     // Get the first image URL, or undefined if no images
     const image_url = product.images && product.images.length > 0 && product.images[0]
-      ? product.images[0].src 
+      ? product.images[0].src
       : undefined;
 
     // Check if product has available variants

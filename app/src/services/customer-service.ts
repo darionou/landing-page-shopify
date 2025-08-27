@@ -26,16 +26,16 @@ export class CustomerService {
    * Retrieves customer data by customer ID
    */
   async getCustomerById(
-    session: Session, 
+    session: Session,
     customerId: number
   ): Promise<CustomerData | null> {
     try {
       const restClient = this.apiClient.createRestClient(session);
-      
+
       const customerResponse = await this.apiClient.makeApiCall(
         async () => {
           return await restClient.get({
-            path: `customers/${customerId}`,
+            path: `customers/${customerId}`
           });
         },
         `get customer ${customerId}`
@@ -48,7 +48,7 @@ export class CustomerService {
       }
 
       const customer: ShopifyCustomer = customerResponse.body.customer;
-      
+
       // Get customer metafields for personalization data
       const metafields = await this.getCustomerMetafields(session, customerId);
 
@@ -57,7 +57,7 @@ export class CustomerService {
         first_name: customer.first_name || '',
         email: customer.email || '',
         profile_image_url: metafields.profile_image_url,
-        assigned_product_id: metafields.assigned_product_id ? 
+        assigned_product_id: metafields.assigned_product_id ?
           parseInt(metafields.assigned_product_id, 10) : undefined
       };
 
@@ -73,12 +73,12 @@ export class CustomerService {
    * Retrieves customer metafields for personalization
    */
   async getCustomerMetafields(
-    session: Session, 
+    session: Session,
     customerId: number
   ): Promise<CustomerMetafields> {
     try {
       const restClient = this.apiClient.createRestClient(session);
-      
+
       const metafieldsResponse = await this.apiClient.makeApiCall(
         async () => {
           return await restClient.get({
@@ -94,7 +94,7 @@ export class CustomerService {
       this.apiClient.validateResponse(metafieldsResponse, `get customer ${customerId} metafields`);
 
       const metafields: ShopifyMetafield[] = metafieldsResponse.body?.metafields || [];
-      
+
       return this.parseMetafields(metafields);
 
     } catch (error) {
@@ -140,8 +140,8 @@ export class CustomerService {
    * Validates customer ID format
    */
   validateCustomerId(customerId: any): boolean {
-    return typeof customerId === 'number' && 
-           customerId > 0 && 
+    return typeof customerId === 'number' &&
+           customerId > 0 &&
            Number.isInteger(customerId);
   }
 

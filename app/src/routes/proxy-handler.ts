@@ -17,7 +17,7 @@ export class ProxyHandler {
       scopes: (process.env['SHOPIFY_SCOPES'] || 'read_customers,read_products').split(','),
       hostName: process.env['SHOPIFY_APP_URL'] || 'localhost:3000'
     };
-    
+
     this.apiClient = new ShopifyApiClient(config);
     this.customerService = new CustomerService(this.apiClient);
     this.productService = new ProductService(this.apiClient);
@@ -50,7 +50,7 @@ export class ProxyHandler {
 
       // Retrieve customer data
       const customerData = await this.customerService.getCustomerById(session, customerId);
-      
+
       if (!customerData) {
         const response: ProxyResponse = {
           success: false,
@@ -64,7 +64,7 @@ export class ProxyHandler {
       let assignedProduct;
       if (customerData.assigned_product_id) {
         assignedProduct = await this.productService.getAssignedProduct(
-          session, 
+          session,
           customerData.assigned_product_id
         );
       }
@@ -96,14 +96,14 @@ export class ProxyHandler {
 
     } catch (error) {
       console.error('Error in handleUserLanding:', error);
-      
+
       const response: ProxyResponse = {
         success: false,
-        error: process.env['NODE_ENV'] === 'production' 
-          ? 'Internal server error' 
+        error: process.env['NODE_ENV'] === 'production'
+          ? 'Internal server error'
           : (error as Error).message
       };
-      
+
       res.status(500).json(response);
     }
   }
@@ -115,9 +115,9 @@ export class ProxyHandler {
   private createSession(req: Request): Session {
     // For now, create a basic session
     // In production, you would extract this from authenticated request
-    const shop = req.headers['x-shopify-shop-domain'] as string || 
-                 process.env['SHOPIFY_SHOP_DOMAIN'] || 
-                 'example.myshopify.com';
+    const shop = req.headers['x-shopify-shop-domain'] ||
+                  process.env['SHOPIFY_SHOP_DOMAIN'] ||
+                  'example.myshopify.com';
 
     return {
       id: `session_${Date.now()}`,
@@ -140,7 +140,7 @@ export class ProxyHandler {
    * Validates Shopify proxy request signature (placeholder)
    * In production, implement proper signature verification
    */
-  validateProxySignature(_req: Request): boolean {
+  validateProxySignature(): boolean {
     // Placeholder for signature validation
     // In production, verify the request signature using Shopify's method
     return true;
