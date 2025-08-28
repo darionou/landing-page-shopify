@@ -1,4 +1,4 @@
-import { ShopifyApiClient, ShopifyApiConfig } from '../services/shopify-api-client';
+import { ShopifyApiProvider, ShopifyApiConfig } from '../providers/shopify-api-provider';
 import { Session } from '@shopify/shopify-api';
 
 export interface CustomerSeedData {
@@ -24,12 +24,12 @@ export interface SeederConfig {
 }
 
 export class DataSeeder {
-  private apiClient: ShopifyApiClient;
+  private apiProvider: ShopifyApiProvider;
   private session: Session;
 
   constructor(config: SeederConfig) {
-    this.apiClient = new ShopifyApiClient(config.apiConfig);
-    this.session = this.apiClient.createSession(config.shop, config.accessToken);
+    this.apiProvider = ShopifyApiProvider.getInstance(config.apiConfig);
+    this.session = this.apiProvider.createSession(config.shop, config.accessToken);
   }
 
   async seedCustomers(customersData: CustomerSeedData[]): Promise<number[]> {
@@ -44,9 +44,9 @@ export class DataSeeder {
   async createCustomer(data: CustomerSeedData): Promise<number> {
     this.validateCustomerData(data);
 
-    const restClient = this.apiClient.createRestClient(this.session);
+    const restClient = this.apiProvider.createRestClient(this.session);
 
-    const customer = await this.apiClient.makeApiCall(async () => {
+    const customer = await this.apiProvider.makeApiCall(async () => {
       const response = await restClient.post({
         path: 'customers',
         data: {
@@ -69,9 +69,9 @@ export class DataSeeder {
   }
 
   private async addCustomerMetafields(customerId: number, metafields: { profile_image_url: string; assigned_product_id: string }): Promise<void> {
-    const restClient = this.apiClient.createRestClient(this.session);
+    const restClient = this.apiProvider.createRestClient(this.session);
 
-    await this.apiClient.makeApiCall(async () => {
+    await this.apiProvider.makeApiCall(async () => {
       const response = await restClient.post({
         path: `customers/${customerId}/metafields`,
         data: {
@@ -86,7 +86,7 @@ export class DataSeeder {
       return response.body.metafield;
     }, 'create profile_image_url metafield');
 
-    await this.apiClient.makeApiCall(async () => {
+    await this.apiProvider.makeApiCall(async () => {
       const response = await restClient.post({
         path: `customers/${customerId}/metafields`,
         data: {
@@ -114,9 +114,9 @@ export class DataSeeder {
   async createProduct(data: ProductSeedData): Promise<number> {
     this.validateProductData(data);
 
-    const restClient = this.apiClient.createRestClient(this.session);
+    const restClient = this.apiProvider.createRestClient(this.session);
 
-    const product = await this.apiClient.makeApiCall(async () => {
+    const product = await this.apiProvider.makeApiCall(async () => {
       const response = await restClient.post({
         path: 'products',
         data: {

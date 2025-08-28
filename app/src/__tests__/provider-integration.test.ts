@@ -3,8 +3,8 @@ import { CustomerService } from '../services/customer-service';
 import { ProductService } from '../services/product-service';
 import { ProxyHandler } from '../routes/proxy-handler';
 
-// Mock ShopifyApiClient to avoid Shopify API initialization issues
-jest.mock('../services/shopify-api-client');
+// Mock ShopifyApiProvider to avoid Shopify API initialization issues
+jest.mock('../providers/shopify-api-provider');
 
 describe('Provider Integration', () => {
   beforeEach(() => {
@@ -26,7 +26,7 @@ describe('Provider Integration', () => {
     it('should create CustomerService with default provider when no provider passed', () => {
       const customerService = new CustomerService();
       expect(customerService).toBeInstanceOf(CustomerService);
-      expect((customerService as any).apiClient).toBeDefined();
+      expect((customerService as any).apiProvider).toBeDefined();
     });
 
     it('should create CustomerService with provided provider', () => {
@@ -34,7 +34,7 @@ describe('Provider Integration', () => {
       const customerService = new CustomerService(provider);
 
       expect(customerService).toBeInstanceOf(CustomerService);
-      expect((customerService as any).apiClient).toBeDefined();
+      expect((customerService as any).apiProvider).toBeDefined();
     });
   });
 
@@ -42,7 +42,7 @@ describe('Provider Integration', () => {
     it('should create ProductService with default provider when no provider passed', () => {
       const productService = new ProductService();
       expect(productService).toBeInstanceOf(ProductService);
-      expect((productService as any).apiClient).toBeDefined();
+      expect((productService as any).apiProvider).toBeDefined();
     });
 
     it('should create ProductService with provided provider', () => {
@@ -50,7 +50,7 @@ describe('Provider Integration', () => {
       const productService = new ProductService(provider);
 
       expect(productService).toBeInstanceOf(ProductService);
-      expect((productService as any).apiClient).toBeDefined();
+      expect((productService as any).apiProvider).toBeDefined();
     });
   });
 

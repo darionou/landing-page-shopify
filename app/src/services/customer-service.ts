@@ -1,5 +1,4 @@
-import { ShopifyApiClient, ShopifyApiError } from './shopify-api-client';
-import { ShopifyApiProvider } from '../providers/shopify-api-provider';
+import { ShopifyApiProvider, ShopifyApiError } from '../providers/shopify-api-provider';
 import { Session } from '@shopify/shopify-api';
 import { ShopifyCustomer, ShopifyMetafield } from '../types';
 
@@ -17,16 +16,10 @@ export interface CustomerMetafields {
 }
 
 export class CustomerService {
-  private apiClient: ShopifyApiClient;
+  private apiProvider: ShopifyApiProvider;
 
   constructor(apiProvider?: ShopifyApiProvider) {
-    if (apiProvider) {
-      this.apiClient = apiProvider.getClient();
-    } else {
-      // Fallback to default provider for backward compatibility
-      const provider = ShopifyApiProvider.getInstance();
-      this.apiClient = provider.getClient();
-    }
+    this.apiProvider = apiProvider || ShopifyApiProvider.getInstance();
   }
 
   /**
@@ -37,9 +30,9 @@ export class CustomerService {
     customerId: number
   ): Promise<CustomerData | null> {
     try {
-      const restClient = this.apiClient.createRestClient(session);
+      const restClient = this.apiProvider.createRestClient(session);
 
-      const customerResponse = await this.apiClient.makeApiCall(
+      const customerResponse = await this.apiProvider.makeApiCall(
         async () => {
           return await restClient.get({
             path: `customers/${customerId}`
@@ -47,8 +40,6 @@ export class CustomerService {
         },
         `get customer ${customerId}`
       );
-
-      this.apiClient.validateResponse(customerResponse, `get customer ${customerId}`);
 
       if (!customerResponse.body?.customer) {
         return null;
@@ -84,9 +75,9 @@ export class CustomerService {
     customerId: number
   ): Promise<CustomerMetafields> {
     try {
-      const restClient = this.apiClient.createRestClient(session);
+      const restClient = this.apiProvider.createRestClient(session);
 
-      const metafieldsResponse = await this.apiClient.makeApiCall(
+      const metafieldsResponse = await this.apiProvider.makeApiCall(
         async () => {
           return await restClient.get({
             path: `customers/${customerId}/metafields`,
@@ -98,15 +89,13 @@ export class CustomerService {
         `get customer ${customerId} metafields`
       );
 
-      this.apiClient.validateResponse(metafieldsResponse, `get customer ${customerId} metafields`);
-
       const metafields: ShopifyMetafield[] = metafieldsResponse.body?.metafields || [];
 
       return this.parseMetafields(metafields);
 
     } catch (error) {
       // If metafields retrieval fails, return empty object rather than failing completely
-      console.warn(`Failed to retrieve metafields for customer ${customerId}:`, error);
+
       return {};
     }
   }
@@ -119,11 +108,11 @@ export class CustomerService {
     customerId: number,
     metafields: Partial<CustomerMetafields>
   ): Promise<void> {
-    const restClient = this.apiClient.createRestClient(session);
+    const restClient = this.apiProvider.createRestClient(session);
 
     for (const [key, value] of Object.entries(metafields)) {
       if (value !== undefined) {
-        await this.apiClient.makeApiCall(
+        await this.apiProvider.makeApiCall(
           async () => {
             return await restClient.post({
               path: `customers/${customerId}/metafields`,

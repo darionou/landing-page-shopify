@@ -1,5 +1,4 @@
-import { ShopifyApiClient, ShopifyApiError } from './shopify-api-client';
-import { ShopifyApiProvider } from '../providers/shopify-api-provider';
+import { ShopifyApiProvider, ShopifyApiError } from '../providers/shopify-api-provider';
 import { Session } from '@shopify/shopify-api';
 import { ShopifyProduct, AssignedProduct } from '../types';
 
@@ -13,16 +12,10 @@ export interface ProductData {
 }
 
 export class ProductService {
-  private apiClient: ShopifyApiClient;
+  private apiProvider: ShopifyApiProvider;
 
   constructor(apiProvider?: ShopifyApiProvider) {
-    if (apiProvider) {
-      this.apiClient = apiProvider.getClient();
-    } else {
-      // Fallback to default provider for backward compatibility
-      const provider = ShopifyApiProvider.getInstance();
-      this.apiClient = provider.getClient();
-    }
+    this.apiProvider = apiProvider || ShopifyApiProvider.getInstance();
   }
 
   /**
@@ -33,9 +26,9 @@ export class ProductService {
     productId: number
   ): Promise<ProductData | null> {
     try {
-      const restClient = this.apiClient.createRestClient(session);
+      const restClient = this.apiProvider.createRestClient(session);
 
-      const productResponse = await this.apiClient.makeApiCall(
+      const productResponse = await this.apiProvider.makeApiCall(
         async () => {
           return await restClient.get({
             path: `products/${productId}`
@@ -43,8 +36,6 @@ export class ProductService {
         },
         `get product ${productId}`
       );
-
-      this.apiClient.validateResponse(productResponse, `get product ${productId}`);
 
       if (!productResponse.body?.product) {
         return null;
@@ -89,9 +80,9 @@ export class ProductService {
    */
   async getDefaultProduct(session: Session): Promise<AssignedProduct | null> {
     try {
-      const restClient = this.apiClient.createRestClient(session);
+      const restClient = this.apiProvider.createRestClient(session);
 
-      const productsResponse = await this.apiClient.makeApiCall(
+      const productsResponse = await this.apiProvider.makeApiCall(
         async () => {
           return await restClient.get({
             path: 'products',
@@ -103,8 +94,6 @@ export class ProductService {
         },
         'get default product'
       );
-
-      this.apiClient.validateResponse(productsResponse, 'get default product');
 
       const products: ShopifyProduct[] = productsResponse.body?.products || [];
 
@@ -174,7 +163,7 @@ export class ProductService {
           products.push(product);
         }
       } catch (error) {
-        console.warn(`Failed to retrieve product ${productId}:`, error);
+
         // Continue with other products
       }
     }

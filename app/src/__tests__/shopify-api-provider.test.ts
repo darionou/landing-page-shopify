@@ -1,10 +1,22 @@
-import { ShopifyApiProvider } from '../providers/shopify-api-provider';
-import { ShopifyApiClient } from '../services/shopify-api-client';
+import { ShopifyApiProvider, ShopifyApiConfig } from '../providers/shopify-api-provider';
 
-// Mock ShopifyApiClient to avoid Shopify API initialization issues
-jest.mock('../services/shopify-api-client');
+// Mock Shopify API to avoid initialization issues
+jest.mock('@shopify/shopify-api', () => ({
+  shopifyApi: jest.fn(() => ({
+    clients: { Rest: jest.fn() },
+    session: { customAppSession: jest.fn(() => ({ accessToken: null })) }
+  })),
+  LATEST_API_VERSION: '2023-07'
+}));
 
 describe('ShopifyApiProvider', () => {
+  const mockConfig: ShopifyApiConfig = {
+    apiKey: 'test_api_key',
+    apiSecretKey: 'test_api_secret',
+    scopes: ['read_customers', 'read_products'],
+    hostName: 'test.localhost'
+  };
+
   beforeEach(() => {
     ShopifyApiProvider.reset();
 
@@ -37,98 +49,42 @@ describe('ShopifyApiProvider', () => {
     });
   });
 
-  describe('Client Management', () => {
+  describe('API Client Management', () => {
     let provider: ShopifyApiProvider;
 
     beforeEach(() => {
-      provider = ShopifyApiProvider.getInstance();
+      provider = ShopifyApiProvider.getInstance(mockConfig);
     });
 
-    it('should create and return ShopifyApiClient', () => {
-      const client = provider.getClient();
-      expect(client).toBeInstanceOf(ShopifyApiClient);
+    it('should create REST client and session', () => {
+      const session = provider.createSession('test-shop.myshopify.com', 'test-token');
+      const restClient = provider.createRestClient(session);
+
+      expect(session).toBeDefined();
+      expect(restClient).toBeDefined();
     });
 
-    it('should create new client instances on each call', () => {
-      const client1 = provider.getClient();
-      const client2 = provider.getClient();
+    it('should create session with correct shop and token', () => {
+      const session = provider.createSession('test-shop.myshopify.com', 'test-token');
 
-      expect(client1).not.toBe(client2);
-    });
-
-    it('should create custom client with provided config', () => {
-      const customConfig = {
-        apiKey: 'custom_key',
-        apiSecretKey: 'custom_secret',
-        scopes: ['read_products'],
-        hostName: 'custom.localhost'
-      };
-
-      const client = provider.createClient(customConfig);
-      expect(client).toBeInstanceOf(ShopifyApiClient);
+      expect(session.accessToken).toBe('test-token');
     });
   });
 
   describe('Configuration Management', () => {
-    let provider: ShopifyApiProvider;
-
-    beforeEach(() => {
-      provider = ShopifyApiProvider.getInstance();
-    });
-
-    it('should validate configuration', () => {
-      const isValid = provider.validateConfiguration();
-      expect(isValid).toBe(true);
-    });
-
-    it('should return false for invalid configuration', () => {
-      delete process.env['SHOPIFY_API_KEY'];
-
+    it('should throw error for invalid configuration', () => {
       ShopifyApiProvider.reset();
-      const newProvider = ShopifyApiProvider.getInstance();
+      const invalidConfig = { ...mockConfig, apiKey: '' };
 
-      const isValid = newProvider.validateConfiguration();
-      expect(isValid).toBe(false);
+      expect(() => ShopifyApiProvider.getInstance(invalidConfig))
+        .toThrow('Invalid Shopify API configuration: missing required fields');
     });
 
-    it('should get current configuration', () => {
-      const config = provider.getConfig();
+    it('should accept valid configuration without throwing', () => {
+      ShopifyApiProvider.reset();
 
-      expect(config).toHaveProperty('apiKey');
-      expect(config).toHaveProperty('apiSecretKey');
-      expect(config).toHaveProperty('scopes');
-      expect(config).toHaveProperty('hostName');
-    });
-  });
-
-  describe('Custom Configuration', () => {
-    it('should accept custom configuration on initialization', () => {
-      const customConfig = {
-        apiKey: 'custom_key',
-        apiSecretKey: 'custom_secret',
-        scopes: ['read_products'],
-        hostName: 'custom.localhost'
-      };
-
-      const provider = ShopifyApiProvider.getInstance(customConfig);
-      const config = provider.getConfig();
-
-      expect(config.apiKey).toBe('custom_key');
-      expect(config.apiSecretKey).toBe('custom_secret');
-      expect(config.scopes).toEqual(['read_products']);
-      expect(config.hostName).toBe('custom.localhost');
-    });
-
-    it('should accept custom configuration', () => {
-      const customConfig = {
-        apiKey: 'test_key',
-        apiSecretKey: 'test_secret',
-        scopes: ['read_products'],
-        hostName: 'test.localhost'
-      };
-
-      const provider = ShopifyApiProvider.getInstance(customConfig);
-      expect(provider).toBeInstanceOf(ShopifyApiProvider);
+      expect(() => ShopifyApiProvider.getInstance(mockConfig))
+        .not.toThrow();
     });
   });
 
@@ -139,26 +95,20 @@ describe('ShopifyApiProvider', () => {
       process.env['SHOPIFY_APP_URL'] = 'env.localhost';
 
       ShopifyApiProvider.reset();
-      const provider = ShopifyApiProvider.getInstance();
-      const config = provider.getConfig();
 
-      expect(config.apiKey).toBe('env_key');
-      expect(config.apiSecretKey).toBe('env_secret');
-      expect(config.hostName).toBe('env.localhost');
+      expect(() => ShopifyApiProvider.getInstance())
+        .not.toThrow();
     });
 
-    it('should use default values when environment variables are missing', () => {
+    it('should throw error when required environment variables are missing', () => {
       delete process.env['SHOPIFY_API_KEY'];
       delete process.env['SHOPIFY_API_SECRET'];
       delete process.env['SHOPIFY_APP_URL'];
 
       ShopifyApiProvider.reset();
-      const provider = ShopifyApiProvider.getInstance();
-      const config = provider.getConfig();
 
-      expect(config.apiKey).toBe('');
-      expect(config.apiSecretKey).toBe('');
-      expect(config.hostName).toBe('localhost:3000');
+      expect(() => ShopifyApiProvider.getInstance())
+        .toThrow('Invalid Shopify API configuration: missing required fields');
     });
   });
 });

@@ -1,8 +1,9 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import dotenv from 'dotenv';
-import { routes } from './routes';
+import { router } from './routes';
 
 // Load environment variables
 dotenv.config();
@@ -30,16 +31,16 @@ app.use((req, _res, next) => {
 });
 
 // Routes
-app.use('/', routes);
+app.use('/', router);
 
 // Global error handling middleware
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error('Global error handler:', err);
-  
+
   res.status(500).json({
     success: false,
-    error: process.env['NODE_ENV'] === 'production' 
-      ? 'Internal server error' 
+    error: process.env['NODE_ENV'] === 'production'
+      ? 'Internal server error'
       : err.message
   });
 });
