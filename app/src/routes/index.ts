@@ -16,7 +16,7 @@ router.get('/api/health', (_req, res) => {
 // Shopify app proxy routes
 // These routes will be configured in Shopify admin as app proxy
 // Format: /apps/{app-handle}/proxy/*
-router.use('/proxy', (req, res, next) => {
+router.use('/proxy', (_req, res, next) => {
   // Verify Shopify proxy request signature if needed
   if (!proxyHandler.validateProxySignature()) {
     res.status(401).json({

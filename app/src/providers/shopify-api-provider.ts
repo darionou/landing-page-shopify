@@ -88,6 +88,76 @@ export class ShopifyApiProvider {
   }
 
   /**
+   * Creates a GraphQL client for making API calls
+   */
+  public createGraphQLClient(session: Session): any {
+    return new this.shopify['clients'].Graphql({ session });
+  }
+
+  /**
+   * Makes a GraphQL query with retry logic and error handling
+   */
+  public async makeGraphQLCall(
+    session: Session,
+    query: string,
+    variables?: any,
+    operation?: string
+  ): Promise<any> {
+    const graphqlClient = this.createGraphQLClient(session);
+
+    return this.makeApiCall(async () => {
+      const response = await graphqlClient.query({
+        data: query,
+        variables
+      });
+
+      // Check for GraphQL errors
+      if (response.body.errors && response.body.errors.length > 0) {
+        const errorMessages = response.body.errors.map((error: any) => error.message).join(', ');
+        throw new Error(`GraphQL Error: ${errorMessages}`);
+      }
+
+      return response.body.data;
+    }, operation || 'GraphQL query');
+  }
+
+  /**
+   * Makes a REST API call with retry logic and error handling
+   */
+  public async makeRestCall(
+    session: Session,
+    method: 'GET' | 'POST' | 'PUT' | 'DELETE',
+    path: string,
+    data?: any,
+    operation?: string
+  ): Promise<any> {
+    const restClient = this.createRestClient(session);
+
+    return this.makeApiCall(async () => {
+      let response;
+
+      switch (method) {
+        case 'GET':
+          response = await restClient.get({ path });
+          break;
+        case 'POST':
+          response = await restClient.post({ path, data });
+          break;
+        case 'PUT':
+          response = await restClient.put({ path, data });
+          break;
+        case 'DELETE':
+          response = await restClient.delete({ path });
+          break;
+        default:
+          throw new Error(`Unsupported HTTP method: ${method}`);
+      }
+
+      return response.body;
+    }, operation || 'REST API call');
+  }
+
+  /**
    * Creates a session object for API calls
    */
   public createSession(shop: string, accessToken: string): Session {
@@ -112,7 +182,7 @@ export class ShopifyApiProvider {
   /**
    * Makes a REST API call with retry logic and error handling
    */
-  public async makeApiCall<T>(
+  private async makeApiCall<T>(
     apiCall: () => Promise<T>,
     operation: string
   ): Promise<T> {

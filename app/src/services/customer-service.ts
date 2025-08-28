@@ -1,6 +1,11 @@
-import { ShopifyApiProvider, ShopifyApiError } from '../providers/shopify-api-provider';
+import { ShopifyApiProvider } from '../providers/shopify-api-provider';
 import { Session } from '@shopify/shopify-api';
-import { ShopifyCustomer, ShopifyMetafield } from '../types';
+import {
+  GET_CUSTOMER_BY_ID,
+  GET_CUSTOMER_METAFIELDS,
+  extractGraphQLData
+} from '../graphql';
+import { toGraphQLId, toRestId } from '../utils/id-conversion.utils';
 
 export interface CustomerData {
   id: number;
@@ -23,44 +28,50 @@ export class CustomerService {
   }
 
   /**
-   * Retrieves customer data by customer ID
+   * Retrieves customer data by customer ID using GraphQL
    */
   async getCustomerById(
     session: Session,
     customerId: number
   ): Promise<CustomerData | null> {
     try {
-      const restClient = this.apiProvider.createRestClient(session);
+      const graphqlId = toGraphQLId(customerId, 'Customer');
 
-      const customerResponse = await this.apiProvider.makeApiCall(
-        async () => {
-          return await restClient.get({
-            path: `customers/${customerId}`
-          });
-        },
+      const response = await this.apiProvider.makeGraphQLCall(
+        session,
+        GET_CUSTOMER_BY_ID,
+        { id: graphqlId },
         `get customer ${customerId}`
       );
 
-      if (!customerResponse.body?.customer) {
+      const data = extractGraphQLData(response);
+
+      if (!data.customer) {
         return null;
       }
 
-      const customer: ShopifyCustomer = customerResponse.body.customer;
+      const customer = data.customer;
 
-      // Get customer metafields for personalization data
-      const metafields = await this.getCustomerMetafields(session, customerId);
+      // Extract metafields
+      const metafields: { [key: string]: any } = {};
+      if (customer.metafields?.edges) {
+        customer.metafields.edges.forEach((edge: any) => {
+          const metafield = edge.node;
+          metafields[metafield.key] = metafield.value;
+        });
+      }
 
       return {
-        id: customer.id,
-        first_name: customer.first_name || '',
+        id: toRestId(customer.id),
+        first_name: customer.firstName || '',
         email: customer.email || '',
-        profile_image_url: metafields.profile_image_url,
-        assigned_product_id: metafields.assigned_product_id ?
-          parseInt(metafields.assigned_product_id, 10) : undefined
+        profile_image_url: metafields['profile_image_url'],
+        assigned_product_id: metafields['assigned_product_id'] ?
+          parseInt(metafields['assigned_product_id'], 10) : undefined
       };
 
     } catch (error) {
-      if (error instanceof ShopifyApiError && error.statusCode === 404) {
+      if (error instanceof Error && error.message.includes('not found')) {
         return null; // Customer not found
       }
       throw error;
@@ -68,67 +79,47 @@ export class CustomerService {
   }
 
   /**
-   * Retrieves customer metafields for personalization
+   * Retrieves customer metafields for personalization using GraphQL
    */
   async getCustomerMetafields(
     session: Session,
     customerId: number
   ): Promise<CustomerMetafields> {
     try {
-      const restClient = this.apiProvider.createRestClient(session);
+      const graphqlId = toGraphQLId(customerId, 'Customer');
 
-      const metafieldsResponse = await this.apiProvider.makeApiCall(
-        async () => {
-          return await restClient.get({
-            path: `customers/${customerId}/metafields`,
-            query: {
-              namespace: 'personalization'
-            }
-          });
+      const response = await this.apiProvider.makeGraphQLCall(
+        session,
+        GET_CUSTOMER_METAFIELDS,
+        {
+          id: graphqlId,
+          namespace: 'personalization'
         },
         `get customer ${customerId} metafields`
       );
 
-      const metafields: ShopifyMetafield[] = metafieldsResponse.body?.metafields || [];
+      const data = extractGraphQLData(response);
 
-      return this.parseMetafields(metafields);
+      if (!data.customer?.metafields?.edges) {
+        return {};
+      }
+
+      const result: CustomerMetafields = {};
+
+      data.customer.metafields.edges.forEach((edge: any) => {
+        const metafield = edge.node;
+        if (metafield.key === 'profile_image_url') {
+          result.profile_image_url = metafield.value;
+        } else if (metafield.key === 'assigned_product_id') {
+          result.assigned_product_id = metafield.value;
+        }
+      });
+
+      return result;
 
     } catch (error) {
       // If metafields retrieval fails, return empty object rather than failing completely
-
       return {};
-    }
-  }
-
-  /**
-   * Updates customer metafields for personalization
-   */
-  async updateCustomerMetafields(
-    session: Session,
-    customerId: number,
-    metafields: Partial<CustomerMetafields>
-  ): Promise<void> {
-    const restClient = this.apiProvider.createRestClient(session);
-
-    for (const [key, value] of Object.entries(metafields)) {
-      if (value !== undefined) {
-        await this.apiProvider.makeApiCall(
-          async () => {
-            return await restClient.post({
-              path: `customers/${customerId}/metafields`,
-              data: {
-                metafield: {
-                  namespace: 'personalization',
-                  key: key,
-                  value: value.toString(),
-                  type: 'single_line_text_field'
-                }
-              }
-            });
-          },
-          `update customer ${customerId} metafield ${key}`
-        );
-      }
     }
   }
 
@@ -141,26 +132,66 @@ export class CustomerService {
            Number.isInteger(customerId);
   }
 
-  /**
-   * Parses metafields array into structured object
-   */
-  private parseMetafields(metafields: ShopifyMetafield[]): CustomerMetafields {
-    const result: CustomerMetafields = {};
 
-    for (const metafield of metafields) {
-      if (metafield.namespace === 'personalization') {
-        switch (metafield.key) {
-          case 'profile_image_url':
-            result.profile_image_url = metafield.value;
-            break;
-          case 'assigned_product_id':
-            result.assigned_product_id = metafield.value;
-            break;
-        }
+  /**
+   * Creates a new customer using REST API
+   */
+  async createCustomer(
+    session: Session,
+    customerData: {
+      first_name: string;
+      last_name: string;
+      email: string;
+      metafields?: {
+        profile_image_url?: string;
+        assigned_product_id?: string;
+      };
+    }
+  ): Promise<number> {
+    const customerPayload: any = {
+      customer: {
+        first_name: customerData.first_name,
+        last_name: customerData.last_name,
+        email: customerData.email
+      }
+    };
+
+    // Add metafields if provided
+    if (customerData.metafields) {
+      customerPayload.customer.metafields = [];
+
+      if (customerData.metafields.profile_image_url) {
+        customerPayload.customer.metafields.push({
+          namespace: 'personalization',
+          key: 'profile_image_url',
+          value: customerData.metafields.profile_image_url,
+          type: 'single_line_text_field'
+        });
+      }
+
+      if (customerData.metafields.assigned_product_id) {
+        customerPayload.customer.metafields.push({
+          namespace: 'personalization',
+          key: 'assigned_product_id',
+          value: customerData.metafields.assigned_product_id,
+          type: 'single_line_text_field'
+        });
       }
     }
 
-    return result;
+    const response = await this.apiProvider.makeRestCall(
+      session,
+      'POST',
+      'customers',
+      customerPayload,
+      'create customer'
+    );
+
+    if (!response.customer || !response.customer.id) {
+      throw new Error('Failed to create customer: Invalid response');
+    }
+
+    return response.customer.id;
   }
 
   /**

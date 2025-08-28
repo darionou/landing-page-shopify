@@ -1,5 +1,7 @@
 import { ShopifyApiProvider, ShopifyApiConfig } from '../providers/shopify-api-provider';
 import { Session } from '@shopify/shopify-api';
+import { CustomerService } from '../services/customer-service';
+import { ProductService } from '../services/product-service';
 
 export interface CustomerSeedData {
   first_name: string;
@@ -26,10 +28,14 @@ export interface SeederConfig {
 export class DataSeeder {
   private apiProvider: ShopifyApiProvider;
   private session: Session;
+  private customerService: CustomerService;
+  private productService: ProductService;
 
   constructor(config: SeederConfig) {
     this.apiProvider = ShopifyApiProvider.getInstance(config.apiConfig);
     this.session = this.apiProvider.createSession(config.shop, config.accessToken);
+    this.customerService = new CustomerService(this.apiProvider);
+    this.productService = new ProductService(this.apiProvider);
   }
 
   async seedCustomers(customersData: CustomerSeedData[]): Promise<number[]> {
@@ -44,63 +50,30 @@ export class DataSeeder {
   async createCustomer(data: CustomerSeedData): Promise<number> {
     this.validateCustomerData(data);
 
-    const restClient = this.apiProvider.createRestClient(this.session);
-
-    const customer = await this.apiProvider.makeApiCall(async () => {
-      const response = await restClient.post({
-        path: 'customers',
-        data: {
-          customer: {
-            first_name: data.first_name,
-            last_name: data.last_name,
-            email: data.email
-          }
+    try {
+      // Create customer with metafields in a single call
+      const customerId = await this.customerService.createCustomer(this.session, {
+        first_name: data.first_name,
+        last_name: data.last_name,
+        email: data.email,
+        metafields: {
+          profile_image_url: data.profile_image_url,
+          assigned_product_id: data.assigned_product_id
         }
       });
-      return response.body.customer;
-    }, 'create customer');
 
-    await this.addCustomerMetafields(customer.id, {
-      profile_image_url: data.profile_image_url,
-      assigned_product_id: data.assigned_product_id
-    });
-
-    return customer.id;
+      console.log(`Created customer: ${data.first_name} ${data.last_name} (ID: ${customerId})`);
+      return customerId;
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('has already been taken')) {
+        console.log(`⚠️  Customer ${data.email} already exists, skipping...`);
+        // Return a placeholder ID or handle this case as needed
+        return -1;
+      }
+      throw error;
+    }
   }
 
-  private async addCustomerMetafields(customerId: number, metafields: { profile_image_url: string; assigned_product_id: string }): Promise<void> {
-    const restClient = this.apiProvider.createRestClient(this.session);
-
-    await this.apiProvider.makeApiCall(async () => {
-      const response = await restClient.post({
-        path: `customers/${customerId}/metafields`,
-        data: {
-          metafield: {
-            namespace: 'personalization',
-            key: 'profile_image_url',
-            value: metafields.profile_image_url,
-            type: 'single_line_text_field'
-          }
-        }
-      });
-      return response.body.metafield;
-    }, 'create profile_image_url metafield');
-
-    await this.apiProvider.makeApiCall(async () => {
-      const response = await restClient.post({
-        path: `customers/${customerId}/metafields`,
-        data: {
-          metafield: {
-            namespace: 'personalization',
-            key: 'assigned_product_id',
-            value: metafields.assigned_product_id,
-            type: 'single_line_text_field'
-          }
-        }
-      });
-      return response.body.metafield;
-    }, 'create assigned_product_id metafield');
-  }
 
   async seedProducts(productsData: ProductSeedData[]): Promise<number[]> {
     const createdIds: number[] = [];
@@ -114,25 +87,25 @@ export class DataSeeder {
   async createProduct(data: ProductSeedData): Promise<number> {
     this.validateProductData(data);
 
-    const restClient = this.apiProvider.createRestClient(this.session);
-
-    const product = await this.apiProvider.makeApiCall(async () => {
-      const response = await restClient.post({
-        path: 'products',
-        data: {
-          product: {
-            title: data.title,
-            handle: data.handle,
-            body_html: data.description,
-            variants: [{ price: data.price }],
-            images: [{ src: data.image_url }]
-          }
-        }
+    try {
+      // Create product using ProductService
+      const productId = await this.productService.createProduct(this.session, {
+        title: data.title,
+        handle: data.handle,
+        description: data.description,
+        price: data.price,
+        image_url: data.image_url
       });
-      return response.body.product;
-    }, 'create product');
 
-    return product.id;
+      console.log(`Created product: ${data.title} (ID: ${productId})`);
+      return productId;
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('has already been taken')) {
+
+        return -1;
+      }
+      throw error;
+    }
   }
 
   private validateCustomerData(data: CustomerSeedData): void {
@@ -179,6 +152,13 @@ export class DataSeeder {
         email: 'bob.smith@example.com',
         profile_image_url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop&crop=face',
         assigned_product_id: '2'
+      },
+      {
+        first_name: 'Charlie',
+        last_name: 'Brown',
+        email: 'charlie.brown@example.com',
+        profile_image_url: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&h=150&fit=crop&crop=face',
+        assigned_product_id: '1'
       }
     ];
   }

@@ -1,6 +1,12 @@
-import { ShopifyApiProvider, ShopifyApiError } from '../providers/shopify-api-provider';
+import { ShopifyApiProvider } from '../providers/shopify-api-provider';
 import { Session } from '@shopify/shopify-api';
-import { ShopifyProduct, AssignedProduct } from '../types';
+import { AssignedProduct } from '../types';
+import {
+  GET_PRODUCT_BY_ID,
+  GET_DEFAULT_PRODUCT,
+  extractGraphQLData
+} from '../graphql';
+import { toGraphQLId, toRestId } from '../utils/id-conversion.utils';
 
 export interface ProductData {
   id: number;
@@ -19,34 +25,32 @@ export class ProductService {
   }
 
   /**
-   * Retrieves product data by product ID
+   * Retrieves product data by product ID using GraphQL
    */
   async getProductById(
     session: Session,
     productId: number
   ): Promise<ProductData | null> {
     try {
-      const restClient = this.apiProvider.createRestClient(session);
+      const graphqlId = toGraphQLId(productId, 'Product');
 
-      const productResponse = await this.apiProvider.makeApiCall(
-        async () => {
-          return await restClient.get({
-            path: `products/${productId}`
-          });
-        },
+      const response = await this.apiProvider.makeGraphQLCall(
+        session,
+        GET_PRODUCT_BY_ID,
+        { id: graphqlId },
         `get product ${productId}`
       );
 
-      if (!productResponse.body?.product) {
+      const data = extractGraphQLData(response);
+
+      if (!data.product) {
         return null;
       }
 
-      const product: ShopifyProduct = productResponse.body.product;
-
-      return this.transformProductData(product);
+      return this.transformGraphQLProductData(data.product);
 
     } catch (error) {
-      if (error instanceof ShopifyApiError && error.statusCode === 404) {
+      if (error instanceof Error && error.message.includes('not found')) {
         return null; // Product not found
       }
       throw error;
@@ -76,48 +80,37 @@ export class ProductService {
   }
 
   /**
-   * Gets a default/featured product when no specific product is assigned
+   * Gets a default/featured product when no specific product is assigned using GraphQL
    */
   async getDefaultProduct(session: Session): Promise<AssignedProduct | null> {
     try {
-      const restClient = this.apiProvider.createRestClient(session);
-
-      const productsResponse = await this.apiProvider.makeApiCall(
-        async () => {
-          return await restClient.get({
-            path: 'products',
-            query: {
-              limit: 1,
-              status: 'active'
-            }
-          });
-        },
+      const response = await this.apiProvider.makeGraphQLCall(
+        session,
+        GET_DEFAULT_PRODUCT,
+        {},
         'get default product'
       );
 
-      const products: ShopifyProduct[] = productsResponse.body?.products || [];
+      const data = extractGraphQLData(response);
 
-      if (products.length === 0) {
+      if (!data.products?.edges || data.products.edges.length === 0) {
         return null;
       }
 
-      const firstProduct = products[0];
-      if (!firstProduct) {
-        return null;
-      }
-
-      const product = this.transformProductData(firstProduct);
+      const productEdge = data.products.edges[0];
+      const product = productEdge.node;
+      const transformedProduct = this.transformGraphQLProductData(product);
 
       return {
-        id: product.id,
-        title: product.title,
-        image_url: product.image_url || '',
-        price: product.price,
-        handle: product.handle
+        id: transformedProduct.id,
+        title: transformedProduct.title,
+        image_url: transformedProduct.image_url || '',
+        price: transformedProduct.price,
+        handle: transformedProduct.handle
       };
 
     } catch (error) {
-      console.warn('Failed to retrieve default product:', error);
+      
       return null;
     }
   }
@@ -142,7 +135,7 @@ export class ProductService {
       const productData = await this.getProductById(session, productId);
       return productData?.available || false;
     } catch (error) {
-      console.warn(`Failed to check availability for product ${productId}:`, error);
+
       return false;
     }
   }
@@ -172,30 +165,66 @@ export class ProductService {
   }
 
   /**
-   * Transforms Shopify product data to our internal format
+   * Transforms GraphQL product data to our internal format
    */
-  private transformProductData(product: ShopifyProduct): ProductData {
-    // Get the first variant's price, or default to '0.00'
-    const price = product.variants && product.variants.length > 0 && product.variants[0]
-      ? product.variants[0].price
-      : '0.00';
-
-    // Get the first image URL, or undefined if no images
-    const image_url = product.images && product.images.length > 0 && product.images[0]
-      ? product.images[0].src
-      : undefined;
-
-    // Check if product has available variants
-    const available = product.variants && product.variants.length > 0;
+  private transformGraphQLProductData(product: any): ProductData {
+    const variant = product.variants?.edges?.[0]?.node;
+    const image = product.images?.edges?.[0]?.node;
 
     return {
-      id: product.id,
+      id: toRestId(product.id),
       title: product.title || 'Untitled Product',
       handle: product.handle || '',
-      price: price,
-      image_url: image_url,
-      available: available
+      price: variant?.price || '0.00',
+      image_url: image?.url,
+      available: product.status === 'ACTIVE' && (variant?.availableForSale ?? false)
     };
+  }
+
+
+  /**
+   * Creates a new product using REST (more reliable for creation operations)
+   */
+  async createProduct(
+    session: Session,
+    productData: {
+      title: string;
+      handle: string;
+      description: string;
+      price: string;
+      image_url?: string;
+    }
+  ): Promise<number> {
+    const productPayload = {
+      product: {
+        title: productData.title,
+        handle: productData.handle,
+        body_html: productData.description,
+        variants: [{
+          price: productData.price,
+          inventory_management: 'shopify',
+          inventory_quantity: 100
+        }],
+        images: productData.image_url ? [{
+          src: productData.image_url,
+          alt: productData.title
+        }] : []
+      }
+    };
+
+    const response = await this.apiProvider.makeRestCall(
+      session,
+      'POST',
+      'products',
+      productPayload,
+      'create product'
+    );
+
+    if (!response.product || !response.product.id) {
+      throw new Error('Failed to create product: Invalid response');
+    }
+
+    return response.product.id;
   }
 
   /**
