@@ -5,9 +5,7 @@
 
 // Customer operations
 export {
-  GET_CUSTOMER_BY_ID,
-  GET_CUSTOMER_METAFIELDS,
-  SEARCH_CUSTOMERS
+  GET_CUSTOMER_BY_ID
 } from './queries/customer.queries';
 
 
@@ -39,6 +37,12 @@ export interface GraphQLUserError {
 
 // Helper function to extract data from GraphQL response
 export function extractGraphQLData(response: any): any {
+  // If response already contains the data directly (from updated provider)
+  if (response && typeof response === 'object' && !response.data && !response.errors) {
+    return response;
+  }
+
+  // Handle traditional GraphQL response format
   if (response.errors && response.errors.length > 0) {
     throw new Error(`GraphQL Error: ${response.errors.map((e: any) => e.message).join(', ')}`);
   }
