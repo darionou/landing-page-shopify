@@ -20,28 +20,38 @@ async function runSeeders() {
   const seeder = new DataSeeder(config);
 
   console.log('Creating products...');
-  const productIds = await seeder.seedProducts(DataSeeder.getDefaultProducts());
+  const productMap = await seeder.seedProducts(DataSeeder.getDefaultProducts());
 
-  const validProductIds = productIds.filter(id => id > 0);
-
-  if (validProductIds.length === 0) {
-    throw new Error('No valid products were created. Cannot assign products to customers.');
+  if (productMap.size === 0) {
+    console.warn('No new products were created (they might exist already). Customers will be seeded without product assignments if handles are not found.');
   }
 
-  const customersWithRealProducts = DataSeeder.getDefaultCustomers().map((customer, index) => {
-    const productId = validProductIds[index % validProductIds.length];
-    if (!productId) {
-      throw new Error(`No product ID available for customer ${customer.first_name}`);
+  const customersWithRealProducts = DataSeeder.getDefaultCustomers().map(customer => {
+    // Skip product assignment if the customer has no assigned_product_id
+    if (!customer.assigned_product_id) {
+      return customer;
     }
+
+    const productId = productMap.get(customer.assigned_product_id);
+
+    if (!productId) {
+      console.warn(`Product with handle '${customer.assigned_product_id}' not found for customer ${customer.first_name}. Skipping product assignment.`);
+      return {
+        ...customer,
+        assigned_product_id: '' // Clear the handle if it's invalid
+      };
+    }
+
     return {
       ...customer,
-      assigned_product_id: productId.toString()
+      assigned_product_id: productId.toString() // Overwrite the handle with the real product ID
     };
   });
 
+  console.log('Creating customers...');
   const customerIds = await seeder.seedCustomers(customersWithRealProducts);
 
-
+  const productIds = Array.from(productMap.values());
   return { customerIds, productIds };
 }
 
