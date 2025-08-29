@@ -92,7 +92,8 @@ export class CustomerService {
       customer: {
         first_name: customerData.first_name,
         last_name: customerData.last_name,
-        email: customerData.email
+        email: customerData.email,
+        metafields: []
       }
     };
 
