@@ -1,5 +1,9 @@
 import { shopifyApi, LATEST_API_VERSION, Session, ApiVersion, ShopifyRestResources } from '@shopify/shopify-api';
 import '@shopify/shopify-api/adapters/node';
+import dotenv from 'dotenv';
+
+// Ensure environment variables are loaded
+dotenv.config();
 
 export interface ShopifyApiConfig {
   apiKey: string;
@@ -7,6 +11,8 @@ export interface ShopifyApiConfig {
   scopes: string[];
   hostName: string;
   apiVersion?: ApiVersion;
+  accessToken?: string;
+  shop?: string;
 }
 
 export interface RetryConfig {
@@ -36,13 +42,6 @@ export class ShopifyApiProvider {
   private shopify: ShopifyRestResources;
   private retryConfig: RetryConfig;
 
-
-  /**
-   * Constructor for ShopifyApiProvider
-   * @param {ShopifyApiConfig} apiConfig Shopify API configuration
-   * @param {Partial<RetryConfig>} retryConfig Optional retry configuration
-   * @private
-   */
   private constructor(apiConfig: ShopifyApiConfig, retryConfig?: Partial<RetryConfig>) {
     this.apiConfig = apiConfig;
     this.retryConfig = {
@@ -52,8 +51,9 @@ export class ShopifyApiProvider {
       ...retryConfig
     };
 
-    if (!this.validateConfiguration()) {
-      throw new ShopifyApiError('Invalid Shopify API configuration: missing required fields');
+    const validationResult = this.validateConfiguration();
+    if (!validationResult.isValid) {
+      throw new ShopifyApiError(`Invalid Shopify API configuration: missing required fields: ${validationResult.missingFields.join(', ')}`);
     }
 
     this.shopify = shopifyApi({
@@ -72,8 +72,7 @@ export class ShopifyApiProvider {
   public static getInstance(apiConfig?: ShopifyApiConfig, retryConfig?: Partial<RetryConfig>): ShopifyApiProvider {
     if (!ShopifyApiProvider.instance) {
       if (!apiConfig) {
-        // Load default configuration from environment variables
-        apiConfig = ShopifyApiProvider.loadDefaultConfig();
+        apiConfig = ShopifyApiProvider.loadConfig();
       }
       ShopifyApiProvider.instance = new ShopifyApiProvider(apiConfig, retryConfig);
     }
@@ -103,21 +102,13 @@ export class ShopifyApiProvider {
     variables?: any,
     operation?: string
   ): Promise<any> {
-    const graphqlClient = this.createGraphQLClient(session);
+    const client = this.createGraphQLClient(session);
 
     return this.makeApiCall(async () => {
-      const response = await graphqlClient.query({
-        data: query,
+      const response = await client.request(query, {
         variables
       });
-
-      // Check for GraphQL errors
-      if (response.body.errors && response.body.errors.length > 0) {
-        const errorMessages = response.body.errors.map((error: any) => error.message).join(', ');
-        throw new Error(`GraphQL Error: ${errorMessages}`);
-      }
-
-      return response.body.data;
+      return response.data;
     }, operation || 'GraphQL query');
   }
 
@@ -160,23 +151,41 @@ export class ShopifyApiProvider {
   /**
    * Creates a session object for API calls
    */
-  public createSession(shop: string, accessToken: string): Session {
-    const session = this.shopify['session'].customAppSession(shop);
-    session.accessToken = accessToken;
+  public createSession(shop?: string, accessToken?: string): Session {
+    const sessionShop = shop || this.apiConfig.shop;
+    const sessionToken = accessToken || this.apiConfig.accessToken;
+
+    const session = this.shopify['session'].customAppSession(sessionShop);
+    session.accessToken = sessionToken;
     return session;
   }
 
   /**
    * Validates that all required configuration is present
    */
-  private validateConfiguration(): boolean {
-    return Boolean(
-      this.apiConfig.apiKey &&
-      this.apiConfig.apiSecretKey &&
-      this.apiConfig.scopes &&
-      this.apiConfig.scopes.length > 0 &&
-      this.apiConfig.hostName
-    );
+  private validateConfiguration(): { isValid: boolean; missingFields: string[] } {
+    const missingFields: string[] = [];
+
+    if (!this.apiConfig.apiKey) {
+      missingFields.push('apiKey (SHOPIFY_API_KEY)');
+    }
+
+    if (!this.apiConfig.apiSecretKey) {
+      missingFields.push('apiSecretKey (SHOPIFY_API_SECRET)');
+    }
+
+    if (!this.apiConfig.scopes || this.apiConfig.scopes.length === 0) {
+      missingFields.push('scopes (SHOPIFY_SCOPES)');
+    }
+
+    if (!this.apiConfig.hostName) {
+      missingFields.push('hostName (SHOPIFY_APP_URL)');
+    }
+
+    return {
+      isValid: missingFields.length === 0,
+      missingFields
+    };
   }
 
   /**
@@ -240,13 +249,16 @@ export class ShopifyApiProvider {
   /**
    * Loads default configuration from environment variables
    */
-  private static loadDefaultConfig(): ShopifyApiConfig {
-    return {
+  private static loadConfig(): ShopifyApiConfig {
+    const config = {
       apiKey: process.env['SHOPIFY_API_KEY'] || '',
       apiSecretKey: process.env['SHOPIFY_API_SECRET'] || '',
       scopes: (process.env['SHOPIFY_SCOPES'] || 'read_customers,read_products').split(','),
-      hostName: process.env['SHOPIFY_APP_URL'] || 'localhost:3000'
+      hostName: process.env['SHOPIFY_APP_URL'] || 'localhost:3000',
+      accessToken: process.env['SHOPIFY_ACCESS_TOKEN'] || '',
+      shop: process.env['SHOPIFY_SHOP'] || ''
     };
+    return config;
   }
 
   /**
