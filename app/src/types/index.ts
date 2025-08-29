@@ -3,8 +3,8 @@
 export interface UserProfile {
   user_id: string;
   first_name: string;
-  profile_image_url: string;
-  assigned_product: AssignedProduct;
+  profile_image_url?: string;
+  assigned_product?: AssignedProduct;
 }
 
 export interface AssignedProduct {

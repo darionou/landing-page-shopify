@@ -1,5 +1,6 @@
 import { ProductService } from '../services/product-service';
-import { ShopifyApiProvider, ShopifyApiError } from '../providers/shopify-api-provider';
+import { ShopifyApiProvider } from '../providers/shopify-api-provider';
+import { ShopifyApiError } from '../errors/ServerError';
 import { Session } from '@shopify/shopify-api';
 
 // Mock the ShopifyApiProvider
@@ -9,16 +10,12 @@ describe('ProductService', () => {
   let productService: ProductService;
   let mockProvider: jest.Mocked<ShopifyApiProvider>;
   let mockSession: Session;
-  let mockRestClient: any;
 
   beforeEach(() => {
-    mockRestClient = {
-      get: jest.fn()
-    };
-
     mockProvider = {
-      createRestClient: jest.fn().mockReturnValue(mockRestClient),
-      makeApiCall: jest.fn()
+      createGraphQLClient: jest.fn().mockReturnValue({ request: jest.fn() }),
+      makeGraphQLCall: jest.fn(),
+      makeRestCall: jest.fn()
     } as any;
 
     mockSession = { accessToken: 'test-token' } as Session;
@@ -34,20 +31,35 @@ describe('ProductService', () => {
 
   describe('getProductById', () => {
     it('should return product data when product exists', async () => {
-      const mockProductResponse = {
-        body: {
-          product: {
-            id: 456,
-            title: 'Test Product',
-            handle: 'test-product',
-            variants: [{ price: '19.99' }],
-            images: [{ src: 'https://example.com/product.jpg' }],
-            status: 'active'
-          }
+      const mockGraphQLProduct = {
+        id: 'gid://shopify/Product/456',
+        title: 'Test Product',
+        handle: 'test-product',
+        status: 'ACTIVE',
+        variants: {
+          edges: [
+            {
+              node: {
+                price: '19.99',
+                availableForSale: true
+              }
+            }
+          ]
+        },
+        images: {
+          edges: [
+            {
+              node: {
+                url: 'https://example.com/product.jpg'
+              }
+            }
+          ]
         }
       };
 
-      mockProvider.makeApiCall.mockResolvedValue(mockProductResponse);
+      mockProvider.makeGraphQLCall.mockResolvedValue({
+        product: mockGraphQLProduct
+      });
 
       const result = await productService.getProductById(mockSession, 456);
 
@@ -62,8 +74,7 @@ describe('ProductService', () => {
     });
 
     it('should return null when product not found', async () => {
-      const error = new ShopifyApiError('Product not found', 404);
-      mockProvider.makeApiCall.mockRejectedValue(error);
+      mockProvider.makeGraphQLCall.mockResolvedValue({ product: null });
 
       const result = await productService.getProductById(mockSession, 999);
 
@@ -72,37 +83,34 @@ describe('ProductService', () => {
 
     it('should throw error for other API errors', async () => {
       const error = new ShopifyApiError('Server error', 500);
-      mockProvider.makeApiCall.mockRejectedValue(error);
+      mockProvider.makeGraphQLCall.mockRejectedValue(error);
 
       await expect(productService.getProductById(mockSession, 456))
         .rejects.toThrow('Server error');
     });
   });
 
-  describe('validateProductId', () => {
-    it('should return true for valid product ID', () => {
-      expect(productService.validateProductId(456)).toBe(true);
-    });
+  describe('createProduct', () => {
+    it('should create product successfully', async () => {
+      const mockCreateResponse = {
+        product: {
+          id: 123,
+          title: 'Test Product',
+          handle: 'test-product'
+        }
+      };
 
-    it('should return false for invalid product ID', () => {
-      expect(productService.validateProductId('456')).toBe(false);
-      expect(productService.validateProductId(0)).toBe(false);
-      expect(productService.validateProductId(-1)).toBe(false);
-      expect(productService.validateProductId(1.5)).toBe(false);
-    });
-  });
+      mockProvider.makeRestCall = jest.fn().mockResolvedValue(mockCreateResponse);
 
-  describe('getDefaultProductData', () => {
-    it('should return default product data', () => {
-      const result = productService.getDefaultProductData();
-
-      expect(result).toEqual({
-        id: 0,
-        title: 'Featured Product',
-        handle: 'featured-product',
-        price: '0.00',
-        image_url: ''
+      const result = await productService.createProduct(mockSession, {
+        title: 'Test Product',
+        handle: 'test-product',
+        description: 'A test product',
+        price: '19.99',
+        image_url: 'https://example.com/test.jpg'
       });
+
+      expect(result).toBe(123);
     });
   });
 });

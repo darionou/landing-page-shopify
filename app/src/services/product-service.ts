@@ -1,10 +1,7 @@
 import { ShopifyApiProvider } from '../providers/shopify-api-provider';
 import { Session } from '@shopify/shopify-api';
-import { AssignedProduct } from '../types';
 import {
-  GET_PRODUCT_BY_ID,
-  GET_DEFAULT_PRODUCT,
-  extractGraphQLData
+  GET_PRODUCT_BY_ID
 } from '../graphql';
 import { toGraphQLId, toRestId } from '../utils/id-conversion.utils';
 
@@ -20,13 +17,10 @@ export interface ProductData {
 export class ProductService {
   private apiProvider: ShopifyApiProvider;
 
-  constructor(apiProvider?: ShopifyApiProvider) {
-    this.apiProvider = apiProvider || ShopifyApiProvider.getInstance();
+  constructor(apiProvider: ShopifyApiProvider) {
+    this.apiProvider = apiProvider;
   }
 
-  /**
-   * Retrieves product data by product ID using GraphQL
-   */
   async getProductById(
     session: Session,
     productId: number
@@ -41,13 +35,11 @@ export class ProductService {
         `get product ${productId}`
       );
 
-      const data = extractGraphQLData(response);
-
-      if (!data.product) {
+      if (!response.product) {
         return null;
       }
 
-      return this.transformGraphQLProductData(data.product);
+      return this.transformGraphQLProductData(response.product);
 
     } catch (error) {
       if (error instanceof Error && error.message.includes('not found')) {
@@ -55,113 +47,6 @@ export class ProductService {
       }
       throw error;
     }
-  }
-
-  /**
-   * Retrieves assigned product for a customer using their assigned product ID
-   */
-  async getAssignedProduct(
-    session: Session,
-    assignedProductId: number
-  ): Promise<AssignedProduct | null> {
-    const productData = await this.getProductById(session, assignedProductId);
-
-    if (!productData) {
-      return null;
-    }
-
-    return {
-      id: productData.id,
-      title: productData.title,
-      image_url: productData.image_url || '',
-      price: productData.price,
-      handle: productData.handle
-    };
-  }
-
-  /**
-   * Gets a default/featured product when no specific product is assigned using GraphQL
-   */
-  async getDefaultProduct(session: Session): Promise<AssignedProduct | null> {
-    try {
-      const response = await this.apiProvider.makeGraphQLCall(
-        session,
-        GET_DEFAULT_PRODUCT,
-        {},
-        'get default product'
-      );
-
-      const data = extractGraphQLData(response);
-
-      if (!data.products?.edges || data.products.edges.length === 0) {
-        return null;
-      }
-
-      const productEdge = data.products.edges[0];
-      const product = productEdge.node;
-      const transformedProduct = this.transformGraphQLProductData(product);
-
-      return {
-        id: transformedProduct.id,
-        title: transformedProduct.title,
-        image_url: transformedProduct.image_url || '',
-        price: transformedProduct.price,
-        handle: transformedProduct.handle
-      };
-
-    } catch (error) {
-      
-      return null;
-    }
-  }
-
-  /**
-   * Validates product ID format
-   */
-  validateProductId(productId: any): boolean {
-    return typeof productId === 'number' &&
-           productId > 0 &&
-           Number.isInteger(productId);
-  }
-
-  /**
-   * Checks if a product is available for purchase
-   */
-  async isProductAvailable(
-    session: Session,
-    productId: number
-  ): Promise<boolean> {
-    try {
-      const productData = await this.getProductById(session, productId);
-      return productData?.available || false;
-    } catch (error) {
-
-      return false;
-    }
-  }
-
-  /**
-   * Gets multiple products by their IDs
-   */
-  async getProductsByIds(
-    session: Session,
-    productIds: number[]
-  ): Promise<ProductData[]> {
-    const products: ProductData[] = [];
-
-    for (const productId of productIds) {
-      try {
-        const product = await this.getProductById(session, productId);
-        if (product) {
-          products.push(product);
-        }
-      } catch (error) {
-
-        // Continue with other products
-      }
-    }
-
-    return products;
   }
 
   /**
@@ -225,18 +110,5 @@ export class ProductService {
     }
 
     return response.product.id;
-  }
-
-  /**
-   * Provides fallback product data
-   */
-  getDefaultProductData(): AssignedProduct {
-    return {
-      id: 0,
-      title: 'Featured Product',
-      image_url: '',
-      price: '0.00',
-      handle: 'featured-product'
-    };
   }
 }

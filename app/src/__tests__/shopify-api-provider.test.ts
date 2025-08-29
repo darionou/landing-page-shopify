@@ -1,4 +1,5 @@
-import { ShopifyApiProvider, ShopifyApiConfig } from '../providers/shopify-api-provider';
+import { ShopifyApiProvider } from '../providers/shopify-api-provider';
+import { ShopifyApiConfig } from '../types/shopify';
 
 // Mock Shopify API to avoid initialization issues
 jest.mock('@shopify/shopify-api', () => ({

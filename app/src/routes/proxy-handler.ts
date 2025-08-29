@@ -1,19 +1,19 @@
 import { Request, Response } from 'express';
 import { Session } from '@shopify/shopify-api';
 import { CustomerService } from '../services/customer-service';
-import { ProductService } from '../services/product-service';
 import { ShopifyApiProvider } from '../providers/shopify-api-provider';
-import { UserProfile, ProxyResponse, validateUserId } from '../types';
+import { UserProfile, ProxyResponse, AssignedProduct } from '../types';
+import { ProductService } from '../services/product-service';
+
 
 export class ProxyHandler {
   private customerService: CustomerService;
-  private productService: ProductService;
   private apiProvider: ShopifyApiProvider;
 
   constructor() {
     this.apiProvider = ShopifyApiProvider.getInstance();
-    this.customerService = new CustomerService(this.apiProvider);
-    this.productService = new ProductService(this.apiProvider);
+    const productService = new ProductService(this.apiProvider);
+    this.customerService = new CustomerService(this.apiProvider, productService);
   }
 
   /**
@@ -22,11 +22,8 @@ export class ProxyHandler {
    */
   async handleUserLanding(req: Request, res: Response): Promise<void> {
     try {
-      // Extract user_id from query parameters
       const { user_id } = req.query;
-
-      // Validate user_id parameter
-      if (!user_id || !validateUserId(user_id)) {
+      if (!user_id) {
         const response: ProxyResponse = {
           success: false,
           error: 'Invalid or missing user_id parameter'
@@ -35,13 +32,8 @@ export class ProxyHandler {
         return;
       }
 
-      const customerId = parseInt(user_id as string, 10);
-
-      // Create a session for Shopify API calls
-      // In a real app, this would come from the authenticated session
-      const session = this.createSession(req);
-
-      // Retrieve customer data
+      const customerId = user_id as string;
+      const session = this.createSession();
       const customerData = await this.customerService.getCustomerById(session, customerId);
 
       if (!customerData) {
@@ -53,31 +45,11 @@ export class ProxyHandler {
         return;
       }
 
-      // Get assigned product or default product
-      let assignedProduct;
-      if (customerData.assigned_product_id) {
-        assignedProduct = await this.productService.getAssignedProduct(
-          session,
-          customerData.assigned_product_id
-        );
-      }
-
-      // Fallback to default product if no assigned product found
-      if (!assignedProduct) {
-        assignedProduct = await this.productService.getDefaultProduct(session);
-      }
-
-      // Fallback to default product data if still no product
-      if (!assignedProduct) {
-        assignedProduct = this.productService.getDefaultProductData();
-      }
-
-      // Build user profile response
       const userProfile: UserProfile = {
         user_id: user_id as string,
-        first_name: customerData.first_name || 'Valued Customer',
-        profile_image_url: customerData.profile_image_url || this.getDefaultProfileImage(),
-        assigned_product: assignedProduct
+        first_name: customerData.first_name,
+        profile_image_url: customerData.profile_image_url,
+        assigned_product: customerData.assigned_product as AssignedProduct
       };
 
       const response: ProxyResponse = {
@@ -91,41 +63,14 @@ export class ProxyHandler {
 
       const response: ProxyResponse = {
         success: false,
-        error: process.env['NODE_ENV'] === 'production'
-          ? 'Internal server error'
-          : (error as Error).message
+        error: (error as Error).message
       };
-
       res.status(500).json(response);
     }
   }
 
-  /**
-   * Creates a Shopify session for API calls
-   * In production, this should be properly authenticated
-   */
-  private createSession(req: Request): Session {
-    // For now, create a basic session
-    // In production, you would extract this from authenticated request
-    const shop = req.headers['x-shopify-shop-domain'] ||
-                  process.env['SHOPIFY_SHOP_DOMAIN'] ||
-                  'example.myshopify.com';
-
-    return {
-      id: `session_${Date.now()}`,
-      shop: shop,
-      state: 'authenticated',
-      isOnline: false,
-      scope: process.env['SHOPIFY_SCOPES'] || 'read_customers,read_products',
-      accessToken: process.env['SHOPIFY_ACCESS_TOKEN'] || ''
-    } as Session;
-  }
-
-  /**
-   * Returns default profile image URL
-   */
-  private getDefaultProfileImage(): string {
-    return '/assets/default-avatar.png';
+  private createSession(): Session {
+    return this.apiProvider.createSession();
   }
 
   /**
