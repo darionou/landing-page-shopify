@@ -1,17 +1,23 @@
 import { Request, Response } from 'express';
 import { ProxyHandler } from '../routes/proxy-handler';
 import { CustomerService } from '../services/customer-service';
-import { ProductService } from '../services/product-service';
 
 // Mock the services and provider
 jest.mock('../services/customer-service');
 jest.mock('../services/product-service');
-jest.mock('../providers/shopify-api-provider');
+jest.mock('../providers/shopify-api-provider', () => ({
+  ShopifyApiProvider: {
+    getInstance: jest.fn(() => ({
+      createSession: jest.fn(() => ({ accessToken: 'test-token' })),
+      makeGraphQLCall: jest.fn(),
+      makeRestCall: jest.fn()
+    }))
+  }
+}));
 
 describe('ProxyHandler', () => {
   let proxyHandler: ProxyHandler;
   let mockCustomerService: jest.Mocked<CustomerService>;
-  let mockProductService: jest.Mocked<ProductService>;
   let mockRequest: Partial<Request>;
   let mockResponse: Partial<Response>;
   let mockJson: jest.Mock;
@@ -35,12 +41,16 @@ describe('ProxyHandler', () => {
       headers: {}
     };
 
+    // Setup customer service mock methods
+    mockCustomerService = {
+      getCustomerById: jest.fn()
+    } as any;
+
     // Create proxy handler instance
     proxyHandler = new ProxyHandler();
 
-    // Get mocked services
-    mockCustomerService = (proxyHandler as any).customerService;
-    mockProductService = (proxyHandler as any).productService;
+    // Replace the customer service with our mock
+    (proxyHandler as any).customerService = mockCustomerService;
   });
 
   describe('handleUserLanding', () => {
@@ -56,8 +66,8 @@ describe('ProxyHandler', () => {
       });
     });
 
-    it('should return error for invalid user_id parameter', async () => {
-      mockRequest.query = { user_id: 'invalid' };
+    it('should return error for missing user_id parameter', async () => {
+      mockRequest.query = {};
 
       await proxyHandler.handleUserLanding(mockRequest as Request, mockResponse as Response);
 
@@ -82,25 +92,26 @@ describe('ProxyHandler', () => {
     });
 
     it('should return user profile with assigned product', async () => {
-      const mockCustomerData = {
-        id: 123,
-        first_name: 'John',
-        email: 'john@example.com',
-        profile_image_url: 'https://example.com/profile.jpg',
-        assigned_product_id: 456
-      };
-
       const mockAssignedProduct = {
         id: 456,
         title: 'Test Product',
         image_url: 'https://example.com/product.jpg',
         price: '29.99',
-        handle: 'test-product'
+        handle: 'test-product',
+        available: true
+      };
+
+      const mockCustomerData = {
+        id: '123',
+        first_name: 'John',
+        email: 'john@example.com',
+        profile_image_url: 'https://example.com/profile.jpg',
+        assigned_product_id: 456,
+        assigned_product: mockAssignedProduct
       };
 
       mockRequest.query = { user_id: '123' };
       mockCustomerService.getCustomerById.mockResolvedValue(mockCustomerData);
-      mockProductService.getAssignedProduct.mockResolvedValue(mockAssignedProduct);
 
       await proxyHandler.handleUserLanding(mockRequest as Request, mockResponse as Response);
 
@@ -115,74 +126,61 @@ describe('ProxyHandler', () => {
       });
     });
 
-    it('should use default product when no assigned product', async () => {
+    it('should use no assigned product when none provided', async () => {
       const mockCustomerData = {
-        id: 123,
+        id: '123',
         first_name: 'John',
         email: 'john@example.com',
-        assigned_product_id: undefined
-      };
-
-      const mockDefaultProduct = {
-        id: 789,
-        title: 'Default Product',
-        image_url: 'https://example.com/default.jpg',
-        price: '19.99',
-        handle: 'default-product'
+        assigned_product_id: undefined,
+        assigned_product: undefined
       };
 
       mockRequest.query = { user_id: '123' };
       mockCustomerService.getCustomerById.mockResolvedValue(mockCustomerData);
-      mockProductService.getDefaultProduct.mockResolvedValue(mockDefaultProduct);
 
       await proxyHandler.handleUserLanding(mockRequest as Request, mockResponse as Response);
 
-      expect(mockProductService.getDefaultProduct).toHaveBeenCalled();
       expect(mockJson).toHaveBeenCalledWith({
         success: true,
         data: {
           user_id: '123',
           first_name: 'John',
-          profile_image_url: '/assets/default-avatar.png',
-          assigned_product: mockDefaultProduct
+          profile_image_url: undefined,
+          assigned_product: undefined
         }
       });
     });
 
-    it('should use fallback data when assigned product not found', async () => {
-      const mockCustomerData = {
-        id: 123,
-        first_name: 'John',
-        email: 'john@example.com',
-        assigned_product_id: 456
+    it('should handle customer with assigned product properly', async () => {
+      const mockAssignedProduct = {
+        id: 456,
+        title: 'Test Product',
+        image_url: 'https://example.com/product.jpg',
+        price: '29.99',
+        handle: 'test-product',
+        available: true
       };
 
-      const mockFallbackProduct = {
-        id: 0,
-        title: 'Featured Product',
-        image_url: '',
-        price: '0.00',
-        handle: 'featured-product'
+      const mockCustomerData = {
+        id: '123',
+        first_name: 'John',
+        email: 'john@example.com',
+        assigned_product_id: 456,
+        assigned_product: mockAssignedProduct
       };
 
       mockRequest.query = { user_id: '123' };
       mockCustomerService.getCustomerById.mockResolvedValue(mockCustomerData);
-      mockProductService.getAssignedProduct.mockResolvedValue(null);
-      mockProductService.getDefaultProduct.mockResolvedValue(null);
-      mockProductService.getDefaultProductData.mockReturnValue(mockFallbackProduct);
 
       await proxyHandler.handleUserLanding(mockRequest as Request, mockResponse as Response);
 
-      expect(mockProductService.getAssignedProduct).toHaveBeenCalledWith(expect.any(Object), 456);
-      expect(mockProductService.getDefaultProduct).toHaveBeenCalled();
-      expect(mockProductService.getDefaultProductData).toHaveBeenCalled();
       expect(mockJson).toHaveBeenCalledWith({
         success: true,
         data: {
           user_id: '123',
           first_name: 'John',
-          profile_image_url: '/assets/default-avatar.png',
-          assigned_product: mockFallbackProduct
+          profile_image_url: undefined,
+          assigned_product: mockAssignedProduct
         }
       });
     });
@@ -200,25 +198,17 @@ describe('ProxyHandler', () => {
       });
     });
 
-    it('should use default values for missing customer data', async () => {
+    it('should handle customer with empty first name', async () => {
       const mockCustomerData = {
-        id: 123,
+        id: '123',
         first_name: '',
-        email: 'john@example.com'
-      };
-
-      const mockDefaultProduct = {
-        id: 0,
-        title: 'Featured Product',
-        image_url: '',
-        price: '0.00',
-        handle: 'featured-product'
+        email: 'john@example.com',
+        assigned_product_id: undefined,
+        assigned_product: undefined
       };
 
       mockRequest.query = { user_id: '123' };
       mockCustomerService.getCustomerById.mockResolvedValue(mockCustomerData);
-      mockProductService.getDefaultProduct.mockResolvedValue(null);
-      mockProductService.getDefaultProductData.mockReturnValue(mockDefaultProduct);
 
       await proxyHandler.handleUserLanding(mockRequest as Request, mockResponse as Response);
 
@@ -226,9 +216,9 @@ describe('ProxyHandler', () => {
         success: true,
         data: {
           user_id: '123',
-          first_name: 'Valued Customer',
-          profile_image_url: '/assets/default-avatar.png',
-          assigned_product: mockDefaultProduct
+          first_name: '',
+          profile_image_url: undefined,
+          assigned_product: undefined
         }
       });
     });

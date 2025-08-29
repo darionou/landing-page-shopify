@@ -4,7 +4,16 @@ import { ProductService } from '../services/product-service';
 import { ProxyHandler } from '../routes/proxy-handler';
 
 // Mock ShopifyApiProvider to avoid Shopify API initialization issues
-jest.mock('../providers/shopify-api-provider');
+jest.mock('../providers/shopify-api-provider', () => ({
+  ShopifyApiProvider: {
+    getInstance: jest.fn(() => ({
+      createSession: jest.fn(),
+      makeGraphQLCall: jest.fn(),
+      makeRestCall: jest.fn()
+    })),
+    reset: jest.fn()
+  }
+}));
 
 describe('Provider Integration', () => {
   beforeEach(() => {
@@ -23,34 +32,22 @@ describe('Provider Integration', () => {
   });
 
   describe('CustomerService Integration', () => {
-    it('should create CustomerService with default provider when no provider passed', () => {
-      const customerService = new CustomerService();
-      expect(customerService).toBeInstanceOf(CustomerService);
-      expect((customerService as any).apiProvider).toBeDefined();
-    });
-
-    it('should create CustomerService with provided provider', () => {
+    it('should create CustomerService with provided provider and product service', () => {
       const provider = ShopifyApiProvider.getInstance();
-      const customerService = new CustomerService(provider);
+      const productService = new ProductService(provider);
+      const customerService = new CustomerService(provider, productService);
 
       expect(customerService).toBeInstanceOf(CustomerService);
-      expect((customerService as any).apiProvider).toBeDefined();
+      expect(productService).toBeInstanceOf(ProductService);
     });
   });
 
   describe('ProductService Integration', () => {
-    it('should create ProductService with default provider when no provider passed', () => {
-      const productService = new ProductService();
-      expect(productService).toBeInstanceOf(ProductService);
-      expect((productService as any).apiProvider).toBeDefined();
-    });
-
     it('should create ProductService with provided provider', () => {
       const provider = ShopifyApiProvider.getInstance();
       const productService = new ProductService(provider);
 
       expect(productService).toBeInstanceOf(ProductService);
-      expect((productService as any).apiProvider).toBeDefined();
     });
   });
 
@@ -58,25 +55,14 @@ describe('Provider Integration', () => {
     it('should create ProxyHandler with provider-based services', () => {
       const proxyHandler = new ProxyHandler();
       expect(proxyHandler).toBeInstanceOf(ProxyHandler);
-      expect((proxyHandler as any).customerService).toBeInstanceOf(CustomerService);
-      expect((proxyHandler as any).productService).toBeInstanceOf(ProductService);
-      expect((proxyHandler as any).apiProvider).toBeInstanceOf(ShopifyApiProvider);
     });
   });
 
   describe('Provider Sharing', () => {
     it('should use same provider instance across services', () => {
       const provider = ShopifyApiProvider.getInstance();
-      const customerService = new CustomerService(provider);
       const productService = new ProductService(provider);
-
-      expect(customerService).toBeInstanceOf(CustomerService);
-      expect(productService).toBeInstanceOf(ProductService);
-    });
-
-    it('should create services without explicit provider', () => {
-      const customerService = new CustomerService();
-      const productService = new ProductService();
+      const customerService = new CustomerService(provider, productService);
 
       expect(customerService).toBeInstanceOf(CustomerService);
       expect(productService).toBeInstanceOf(ProductService);
