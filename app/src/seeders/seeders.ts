@@ -34,8 +34,8 @@ export class DataSeeder {
   constructor(config: SeederConfig) {
     this.apiProvider = ShopifyApiProvider.getInstance(config.apiConfig);
     this.session = this.apiProvider.createSession(config.shop, config.accessToken);
-    this.customerService = new CustomerService(this.apiProvider);
     this.productService = new ProductService(this.apiProvider);
+    this.customerService = new CustomerService(this.apiProvider, this.productService);
   }
 
   async seedCustomers(customersData: CustomerSeedData[]): Promise<number[]> {
@@ -56,10 +56,8 @@ export class DataSeeder {
         first_name: data.first_name,
         last_name: data.last_name,
         email: data.email,
-        metafields: {
-          profile_image_url: data.profile_image_url,
-          assigned_product_id: data.assigned_product_id
-        }
+        profile_image_url: data.profile_image_url,
+        assigned_product_id: data.assigned_product_id
       });
 
       console.log(`Created customer: ${data.first_name} ${data.last_name} (ID: ${customerId})`);
@@ -67,7 +65,6 @@ export class DataSeeder {
     } catch (error) {
       if (error instanceof Error && error.message.includes('has already been taken')) {
         console.log(`⚠️  Customer ${data.email} already exists, skipping...`);
-        // Return a placeholder ID or handle this case as needed
         return -1;
       }
       throw error;
@@ -157,6 +154,13 @@ export class DataSeeder {
         first_name: 'Charlie',
         last_name: 'Brown',
         email: 'charlie.brown@example.com',
+        profile_image_url: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&h=150&fit=crop&crop=face',
+        assigned_product_id: '1'
+      },
+      {
+        first_name: 'Charlie',
+        last_name: 'Pollo',
+        email: 'charlie.brown2@example.com',
         profile_image_url: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&h=150&fit=crop&crop=face',
         assigned_product_id: '1'
       }
