@@ -16,6 +16,7 @@
     <div class="error-icon">⚠️</div>
     <h2 class="error-title">Welcome!</h2>
     <p class="error-message">We are having trouble loading your personalized content.</p>
+    <p class="error-details" id="error-details-personalized-landing"></p>
     <button class="retry-btn" onclick="retryLoad('personalized-landing')">
       Try Again
     </button>
@@ -141,9 +142,22 @@
   .error-message {
     color: #6b7280;
     font-size: 1.1rem;
-    margin: 0 0 2rem 0;
+    margin: 0 0 1rem 0;
     max-width: 500px;
     line-height: 1.6;
+  }
+
+  .error-details {
+    color: #ef4444;
+    font-size: 0.95rem;
+    margin: 0 0 2rem 0;
+    max-width: 500px;
+    line-height: 1.4;
+    font-weight: 500;
+    background: #fef2f2;
+    padding: 0.75rem 1rem;
+    border-radius: 6px;
+    border-left: 4px solid #ef4444;
   }
 
   .retry-btn {
@@ -385,16 +399,42 @@
       }
     })
     .then(response => {
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      return response.json();
+      // Always parse JSON first, regardless of status
+      return response.json().then(data => {
+        console.log('API Response (status ' + response.status + '):', data); // Debug log
+        
+        if (!response.ok) {
+          // If we have an error message in the response, use it
+          if (data.error) {
+            throw new Error(`api_error:${data.error}`);
+          } else {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+        }
+        return data;
+      });
     })
     .then(data => {
       if (data.success && data.data) {
         displayContent(data.data, pageId);
       } else {
-        throw new Error(data.error || 'Failed to load content');
+        // Check for specific error types in the response
+        let errorType = 'general';
+        let errorMessage = data.error || 'Failed to load content';
+                
+        if (data.error) {
+          if (data.error.toLowerCase().includes('customer not found') || 
+              data.error.toLowerCase().includes('customer does not exist')) {
+            errorType = 'customer_not_found';
+            console.log('Detected customer_not_found error'); // Debug log
+          } else if (data.error.toLowerCase().includes('invalid customer id') ||
+                     data.error.toLowerCase().includes('invalid id format')) {
+            errorType = 'invalid_customer_id';
+            console.log('Detected invalid_customer_id error'); // Debug log
+          }
+        }
+        
+        throw new Error(`${errorType}:${errorMessage}`);
       }
     })
     .catch(error => {
@@ -449,7 +489,40 @@
 
   function showError(pageId, message) {
     document.getElementById(`loading-${pageId}`).style.display = 'none';
-    document.getElementById(`error-${pageId}`).style.display = 'flex';
+    
+    const [errorType, errorMessage] = message.includes(':') ? message.split(':', 2) : ['general', message];
+    
+    console.log('showError - errorType:', errorType, 'errorMessage:', errorMessage); // Debug log
+    
+    // Update error content
+    const errorContainer = document.getElementById(`error-${pageId}`);
+    const errorTitle = errorContainer.querySelector('.error-title');
+    const errorMainMessage = errorContainer.querySelector('.error-message');
+    const errorDetails = document.getElementById(`error-details-${pageId}`);
+    errorTitle.textContent = 'Welcome!';
+    errorMainMessage.textContent = 'We are having trouble loading your personalized content.';
+    
+    // Show specific details based on error type or message content
+    if (errorType === 'api_error' && errorMessage.toLowerCase().includes('customer not found')) {
+      errorDetails.textContent = 'Issue: Customer not found with the provided ID. Please verify the link is correct.';
+      errorDetails.style.display = 'block';
+    } else if (errorType === 'customer_not_found') {
+      errorDetails.textContent = 'Issue: Customer not found with the provided ID. Please verify the link is correct.';
+      errorDetails.style.display = 'block';
+    } else if (errorType === 'invalid_customer_id') {
+      errorDetails.textContent = 'Issue: Invalid customer ID format. Please check the link format.';
+      errorDetails.style.display = 'block';
+    } else if (errorMessage.toLowerCase().includes('network') || errorMessage.toLowerCase().includes('connection')) {
+      errorDetails.textContent = 'Issue: Network connection problem. Please check your internet connection.';
+      errorDetails.style.display = 'block';
+    } else if (errorMessage.toLowerCase().includes('timeout')) {
+      errorDetails.textContent = 'Issue: Request timed out. The server may be busy, please try again.';
+      errorDetails.style.display = 'block';
+    } else {
+      errorDetails.style.display = 'none';
+    }
+    
+    errorContainer.style.display = 'flex';
     console.error('Landing page error:', message);
   }
 
