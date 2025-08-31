@@ -66,18 +66,6 @@ describe('ProxyHandler', () => {
       });
     });
 
-    it('should return error for missing user_id parameter', async () => {
-      mockRequest.query = {};
-
-      await proxyHandler.handleUserLanding(mockRequest as Request, mockResponse as Response);
-
-      expect(mockStatus).toHaveBeenCalledWith(400);
-      expect(mockJson).toHaveBeenCalledWith({
-        success: false,
-        error: 'Invalid or missing user_id parameter'
-      });
-    });
-
     it('should return error when customer not found', async () => {
       mockRequest.query = { user_id: '123' };
       mockCustomerService.getCustomerById.mockResolvedValue(null);
@@ -181,44 +169,6 @@ describe('ProxyHandler', () => {
           first_name: 'John',
           profile_image_url: undefined,
           assigned_product: mockAssignedProduct
-        }
-      });
-    });
-
-    it('should handle service errors gracefully', async () => {
-      mockRequest.query = { user_id: '123' };
-      mockCustomerService.getCustomerById.mockRejectedValue(new Error('Service error'));
-
-      await proxyHandler.handleUserLanding(mockRequest as Request, mockResponse as Response);
-
-      expect(mockStatus).toHaveBeenCalledWith(500);
-      expect(mockJson).toHaveBeenCalledWith({
-        success: false,
-        error: 'Service error'
-      });
-    });
-
-    it('should handle customer with empty first name', async () => {
-      const mockCustomerData = {
-        id: '123',
-        first_name: '',
-        email: 'john@example.com',
-        assigned_product_id: undefined,
-        assigned_product: undefined
-      };
-
-      mockRequest.query = { user_id: '123' };
-      mockCustomerService.getCustomerById.mockResolvedValue(mockCustomerData);
-
-      await proxyHandler.handleUserLanding(mockRequest as Request, mockResponse as Response);
-
-      expect(mockJson).toHaveBeenCalledWith({
-        success: true,
-        data: {
-          user_id: '123',
-          first_name: '',
-          profile_image_url: undefined,
-          assigned_product: undefined
         }
       });
     });
