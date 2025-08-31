@@ -39,9 +39,7 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
 
   res.status(500).json({
     success: false,
-    error: process.env['NODE_ENV'] === 'production'
-      ? 'Internal server error'
-      : err.message
+    error: err.message
   });
 });
 
@@ -54,10 +52,9 @@ app.use('*', (_req, res) => {
 });
 
 // Start server
-if (process.env['NODE_ENV'] !== 'test') {
-  app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-  });
-}
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
+
 
 export { app };
