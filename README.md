@@ -103,7 +103,6 @@ The app uses a comprehensive Shopify API provider that handles:
 - **Singleton Pattern**: Ensures single API configuration instance
 - **Session Management**: Creates and manages Shopify API sessions
 - **Error Handling**: Comprehensive error handling with retry logic
-- **Rate Limiting**: Built-in retry mechanism with exponential backoff
 - **GraphQL & REST**: Support for both API types
 
 ### Customer Service
